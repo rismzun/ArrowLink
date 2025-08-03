@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Typography, useTheme, useMediaQuery, Alert, Button } from '@mui/material';
 import { TripOrigin } from '@mui/icons-material';
 import { calculateBearing, calculateDistance, formatDistance } from '../utils/gps';
 import type { Location } from '../utils/gps';
@@ -16,6 +16,9 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [pulseKey, setPulseKey] = useState(0);
+  const [deviceHeading, setDeviceHeading] = useState<number>(0);
+  const [compassSupported, setCompassSupported] = useState<boolean>(true);
+  const [compassPermission, setCompassPermission] = useState<'granted' | 'denied' | 'prompt'>('prompt');
 
   const bearing = calculateBearing(
     myLocation.latitude,
@@ -31,7 +34,83 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
     targetLocation.longitude
   );
 
-  // Responsive sizing
+  // Calculate relative bearing (target direction relative to device orientation)
+  const relativeBearing = (bearing - deviceHeading + 360) % 360;
+
+  // Request device orientation permission (iOS 13+)
+  const requestOrientationPermission = async () => {
+    if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+      try {
+        const permission = await (DeviceOrientationEvent as any).requestPermission();
+        setCompassPermission(permission);
+        if (permission === 'granted') {
+          startCompass();
+        }
+      } catch (error) {
+        console.error('Error requesting orientation permission:', error);
+        setCompassPermission('denied');
+      }
+    } else {
+      // Non-iOS devices or older iOS versions
+      setCompassPermission('granted');
+      startCompass();
+    }
+  };
+
+  // Start compass/orientation tracking
+  const startCompass = () => {
+    const handleOrientation = (event: DeviceOrientationEvent) => {
+      let heading = 0;
+      
+      // Type assertion for iOS-specific property
+      const eventWithWebkit = event as DeviceOrientationEvent & { webkitCompassHeading?: number };
+      
+      if (eventWithWebkit.webkitCompassHeading !== undefined) {
+        // iOS Safari
+        heading = eventWithWebkit.webkitCompassHeading;
+      } else if (event.alpha !== null) {
+        // Android Chrome and others
+        heading = 360 - event.alpha;
+      }
+      
+      setDeviceHeading(heading);
+    };
+
+    if (window.DeviceOrientationEvent) {
+      window.addEventListener('deviceorientation', handleOrientation);
+      setCompassSupported(true);
+    } else {
+      setCompassSupported(false);
+    }
+
+    return () => {
+      window.removeEventListener('deviceorientation', handleOrientation);
+    };
+  };
+
+  // Initialize compass on component mount
+  useEffect(() => {
+    // Check if we're on a mobile device
+    const isMobileDevice = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobileDevice && window.DeviceOrientationEvent) {
+      // For iOS 13+, request permission
+      if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+        // Don't auto-request, wait for user interaction
+        setCompassPermission('prompt');
+      } else {
+        // Android or older iOS
+        requestOrientationPermission();
+      }
+    } else {
+      setCompassSupported(false);
+    }
+  }, []);
+
+  // Trigger pulse animation when distance changes significantly
+  useEffect(() => {
+    setPulseKey(prev => prev + 1);
+  }, [Math.floor(distance)]);
   const containerSize = isMobile ? 280 : 320;
   const arrowSize = isMobile ? 60 : 80;
   const ringSize1 = containerSize * 0.85;
@@ -107,6 +186,50 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
           opacity: 0.8,
         }}
       />
+
+      {/* Compass permission prompt for iOS */}
+      {compassPermission === 'prompt' && (
+        <Alert 
+          severity="info" 
+          sx={{ 
+            mb: 2,
+            backgroundColor: 'rgba(29, 78, 216, 0.1)',
+            color: 'primary.main',
+            border: '1px solid rgba(29, 78, 216, 0.3)',
+            zIndex: 3,
+            maxWidth: 350
+          }}
+          action={
+            <Button 
+              color="primary" 
+              size="small" 
+              onClick={requestOrientationPermission}
+              sx={{ fontWeight: 600 }}
+            >
+              เปิดใช้งาน
+            </Button>
+          }
+        >
+          ต้องการสิทธิ์เข้าถึงเซ็นเซอร์ทิศทางเพื่อแสดงตำแหน่งที่แม่นยำ
+        </Alert>
+      )}
+
+      {/* Compass not supported warning */}
+      {!compassSupported && (
+        <Alert 
+          severity="warning" 
+          sx={{ 
+            mb: 2,
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            color: 'warning.main',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            zIndex: 3,
+            maxWidth: 350
+          }}
+        >
+          อุปกรณ์นี้ไม่รองรับเซ็นเซอร์ทิศทาง - จะแสดงทิศทางโดยประมาณ
+        </Alert>
+      )}
 
       {/* Distance display at top */}
       <Box sx={{ mb: 4, textAlign: 'center', zIndex: 2 }}>
@@ -207,13 +330,13 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
           }}
         />
 
-        {/* Target indicator - positioned based on bearing */}
+        {/* Target indicator - positioned based on relative bearing */}
         <Box
           sx={{
             position: 'absolute',
             width: arrowSize,
             height: arrowSize,
-            transform: `rotate(${bearing}deg) translate(0, -${ringSize2/2 - 20}px)`,
+            transform: `rotate(${relativeBearing}deg) translate(0, -${ringSize2/2 - 20}px)`,
             transformOrigin: 'center',
             transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             zIndex: 4
@@ -238,7 +361,7 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
             borderLeft: '15px solid transparent',
             borderRight: '15px solid transparent',
             borderBottom: `40px solid ${styles.color}`,
-            transform: `rotate(${bearing}deg) translate(0, -${ringSize3/2 + 30}px)`,
+            transform: `rotate(${relativeBearing}deg) translate(0, -${ringSize3/2 + 30}px)`,
             transformOrigin: 'center bottom',
             transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             filter: `drop-shadow(0 0 8px ${styles.shadowColor})`,

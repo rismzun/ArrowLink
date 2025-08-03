@@ -20,7 +20,7 @@ import {
 import { getCurrentLocation, watchLocation } from '../utils/gps';
 import type { Location } from '../utils/gps';
 import { useLocationSharing } from '../hooks/useSocket';
-import PrecisionFindingWithCompass from './PrecisionFindingWithCompass';
+import PrecisionFinding from './PrecisionFinding';
 
 interface LocationTrackerProps {
   sessionId: string;
@@ -115,7 +115,7 @@ const LocationTracker: React.FC<LocationTrackerProps> = ({ sessionId }) => {
   if (isTracking && otherUserLocation && myLocation) {
     return (
       <Box sx={{ position: 'relative', minHeight: '100vh' }}>
-        <PrecisionFindingWithCompass
+        <PrecisionFinding
           myLocation={myLocation}
           targetLocation={otherUserLocation}
         />
