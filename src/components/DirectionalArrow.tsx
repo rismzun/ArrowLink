@@ -3,13 +3,7 @@ import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
 import { TripOrigin } from '@mui/icons-material';
 import { calculateBearing, calculateDistance, formatDistance } from '../utils/gps';
 import type { Location } from '../utils/gps';
-
-// Extend DeviceOrientationEvent interface for better TypeScript support
-declare global {
-  interface DeviceOrientationEvent {
-    requestPermission?: () => Promise<'granted' | 'denied'>;
-  }
-}
+import { useDeviceOrientation } from '../hooks/useDeviceOrientation';
 
 interface DirectionalArrowProps {
   myLocation: Location;
@@ -23,8 +17,8 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [pulseKey, setPulseKey] = useState(0);
-  const [deviceHeading, setDeviceHeading] = useState<number>(0);
-  const [orientationSupported, setOrientationSupported] = useState(false);
+  const [compensatedBearing, setCompensatedBearing] = useState(0);
+  const { orientation } = useDeviceOrientation();
 
   const bearing = calculateBearing(
     myLocation.latitude,
@@ -40,8 +34,19 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
     targetLocation.longitude
   );
 
-  // Calculate the relative bearing (target direction relative to device heading)
-  const relativeBearing = orientationSupported ? (bearing - deviceHeading + 360) % 360 : bearing;
+  // คำนวณทิศทางที่ชดเชยด้วยการหมุนของอุปกรณ์
+  useEffect(() => {
+    let compensated = bearing;
+    if (orientation && orientation.alpha !== null) {
+      // alpha คือ compass heading (0-360 degrees)
+      // ลบด้วย device heading เพื่อให้ลูกศรชี้ถูกทิศเสมอ
+      compensated = bearing - orientation.alpha;
+      // ทำให้อยู่ในช่วง 0-360
+      if (compensated < 0) compensated += 360;
+      if (compensated >= 360) compensated -= 360;
+    }
+    setCompensatedBearing(compensated);
+  }, [bearing, orientation]);
 
   // Responsive sizing
   const containerSize = isMobile ? 280 : 320;
@@ -90,59 +95,6 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
   useEffect(() => {
     setPulseKey(prev => prev + 1);
   }, [Math.floor(distance)]);
-
-  // Handle device orientation for compass functionality
-  useEffect(() => {
-    const handleOrientation = (event: DeviceOrientationEvent) => {
-      if (event.alpha !== null) {
-        // Convert to standard compass bearing (0 = North, 90 = East, etc.)
-        const alpha = event.alpha;
-        const heading = (360 - alpha) % 360;
-        setDeviceHeading(heading);
-        setOrientationSupported(true);
-      }
-    };
-
-    const requestOrientationPermission = async () => {
-      // Check if DeviceOrientationEvent is available
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof window !== 'undefined') {
-        // For iOS 13+ devices, request permission
-        if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
-          try {
-            const permission = await (DeviceOrientationEvent as any).requestPermission();
-            if (permission === 'granted') {
-              (window as any).addEventListener('deviceorientationabsolute', handleOrientation);
-              setOrientationSupported(true);
-            } else {
-              // Fallback to regular deviceorientation
-              (window as any).addEventListener('deviceorientation', handleOrientation);
-            }
-          } catch (error) {
-            console.log('Orientation permission denied:', error);
-            // Fallback to regular deviceorientation
-            (window as any).addEventListener('deviceorientation', handleOrientation);
-          }
-        } else {
-          // For other devices, use deviceorientationabsolute if available, otherwise deviceorientation
-          if ('ondeviceorientationabsolute' in window) {
-            (window as any).addEventListener('deviceorientationabsolute', handleOrientation);
-          } else {
-            (window as any).addEventListener('deviceorientation', handleOrientation);
-          }
-          setOrientationSupported(true);
-        }
-      }
-    };
-
-    requestOrientationPermission();
-
-    return () => {
-      if (typeof window !== 'undefined') {
-        (window as any).removeEventListener('deviceorientationabsolute', handleOrientation);
-        (window as any).removeEventListener('deviceorientation', handleOrientation);
-      }
-    };
-  }, []);
 
   return (
     <Box
@@ -272,13 +224,13 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
           }}
         />
 
-        {/* Target indicator - positioned based on bearing */}
+        {/* Target indicator - positioned based on compensated bearing */}
         <Box
           sx={{
             position: 'absolute',
             width: arrowSize,
             height: arrowSize,
-            transform: `rotate(${relativeBearing}deg) translate(0, -${ringSize2/2 - 20}px)`,
+            transform: `rotate(${compensatedBearing}deg) translate(0, -${ringSize2/2 - 20}px)`,
             transformOrigin: 'center',
             transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             zIndex: 4
@@ -303,7 +255,7 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
             borderLeft: '15px solid transparent',
             borderRight: '15px solid transparent',
             borderBottom: `40px solid ${styles.color}`,
-            transform: `rotate(${relativeBearing}deg) translate(0, -${ringSize3/2 + 30}px)`,
+            transform: `rotate(${compensatedBearing}deg) translate(0, -${ringSize3/2 + 30}px)`,
             transformOrigin: 'center bottom',
             transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             filter: `drop-shadow(0 0 8px ${styles.shadowColor})`,
