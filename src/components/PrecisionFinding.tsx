@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, useTheme, useMediaQuery, Button } from '@mui/material';
-import { TripOrigin, ExploreOutlined } from '@mui/icons-material';
+import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
+import { TripOrigin } from '@mui/icons-material';
 import { calculateBearing, calculateDistance, formatDistance } from '../utils/gps';
 import type { Location } from '../utils/gps';
-import { useDeviceOrientation } from '../hooks/useDeviceOrientation';
 
 interface DirectionalArrowProps {
   myLocation: Location;
@@ -17,15 +16,6 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [pulseKey, setPulseKey] = useState(0);
-  const [compensatedBearing, setCompensatedBearing] = useState(0);
-  const { orientation, supported, permission, requestPermission } = useDeviceOrientation();
-
-  // Request device orientation permission on component mount
-  useEffect(() => {
-    if (supported && permission === 'prompt') {
-      requestPermission();
-    }
-  }, [supported, permission, requestPermission]);
 
   const bearing = calculateBearing(
     myLocation.latitude,
@@ -40,20 +30,6 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
     targetLocation.latitude,
     targetLocation.longitude
   );
-
-  // คำนวณทิศทางที่ชดเชยด้วยการหมุนของอุปกรณ์
-  useEffect(() => {
-    let compensated = bearing;
-    if (orientation && orientation.alpha !== null) {
-      // alpha คือ compass heading (0-360 degrees)
-      // ลบด้วย device heading เพื่อให้ลูกศรชี้ถูกทิศเสมอ
-      compensated = bearing - orientation.alpha;
-      // ทำให้อยู่ในช่วง 0-360
-      if (compensated < 0) compensated += 360;
-      if (compensated >= 360) compensated -= 360;
-    }
-    setCompensatedBearing(compensated);
-  }, [bearing, orientation]);
 
   // Responsive sizing
   const containerSize = isMobile ? 280 : 320;
@@ -168,42 +144,6 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
         >
           {distance < 2 ? 'Very Close' : distance < 5 ? 'Close' : distance < 15 ? 'Nearby' : distance < 50 ? 'Far' : 'Very Far'}
         </Typography>
-        
-        {/* Compass status indicator */}
-        <Typography
-          variant="caption"
-          sx={{
-            color: permission === 'granted' ? 'rgba(0,212,170,0.8)' : 'rgba(255,159,10,0.8)',
-            fontSize: '12px',
-            mt: 0.5,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 0.5
-          }}
-        >
-          <ExploreOutlined sx={{ fontSize: '14px' }} />
-          {permission === 'granted' ? 'Compass Active' : 
-           permission === 'denied' ? 'Compass Disabled' : 
-           'Enable Compass for Better Accuracy'}
-        </Typography>
-        
-        {permission === 'prompt' && (
-          <Button
-            size="small"
-            onClick={requestPermission}
-            sx={{
-              mt: 1,
-              color: styles.color,
-              borderColor: styles.color,
-              fontSize: '11px',
-              textTransform: 'none'
-            }}
-            variant="outlined"
-          >
-            Enable Compass
-          </Button>
-        )}
       </Box>
 
       {/* Main radar/compass display */}
@@ -285,7 +225,7 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
             position: 'absolute',
             width: arrowSize,
             height: arrowSize,
-            transform: `rotate(${compensatedBearing}deg) translate(0, -${ringSize2/2 - 20}px)`,
+            transform: `rotate(${bearing}deg) translate(0, -${ringSize2/2 - 20}px)`,
             transformOrigin: 'center',
             transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             zIndex: 4
@@ -310,7 +250,7 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
             borderLeft: '15px solid transparent',
             borderRight: '15px solid transparent',
             borderBottom: `40px solid ${styles.color}`,
-            transform: `rotate(${compensatedBearing}deg) translate(0, -${ringSize3/2 + 30}px)`,
+            transform: `rotate(${bearing}deg) translate(0, -${ringSize3/2 + 30}px)`,
             transformOrigin: 'center bottom',
             transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             filter: `drop-shadow(0 0 8px ${styles.shadowColor})`,

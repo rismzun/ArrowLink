@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
 import { TripOrigin } from '@mui/icons-material';
 import { calculateBearing, calculateDistance, formatDistance } from '../utils/gps';
 import type { Location } from '../utils/gps';
-import { useDeviceOrientation } from '../hooks/useDeviceOrientation';
 
 interface DirectionalArrowProps {
   myLocation: Location;
@@ -17,15 +16,23 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [pulseKey, setPulseKey] = useState(0);
-  const [compensatedBearing, setCompensatedBearing] = useState(0);
-  const { orientation } = useDeviceOrientation();
+  const [deviceOrientation, setDeviceOrientation] = useState(0);
+  const [compassHeading, setCompassHeading] = useState<number | null>(null);
 
-  const bearing = calculateBearing(
+  const targetBearing = calculateBearing(
     myLocation.latitude,
     myLocation.longitude,
     targetLocation.latitude,
     targetLocation.longitude
   );
+
+  // Calculate relative bearing considering compass heading
+  const relativeBearing = useMemo(() => {
+    if (compassHeading !== null) {
+      return (targetBearing - compassHeading + 360) % 360;
+    }
+    return targetBearing;
+  }, [targetBearing, compassHeading]);
 
   const distance = calculateDistance(
     myLocation.latitude,
@@ -33,20 +40,6 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
     targetLocation.latitude,
     targetLocation.longitude
   );
-
-  // คำนวณทิศทางที่ชดเชยด้วยการหมุนของอุปกรณ์
-  useEffect(() => {
-    let compensated = bearing;
-    if (orientation && orientation.alpha !== null) {
-      // alpha คือ compass heading (0-360 degrees)
-      // ลบด้วย device heading เพื่อให้ลูกศรชี้ถูกทิศเสมอ
-      compensated = bearing - orientation.alpha;
-      // ทำให้อยู่ในช่วง 0-360
-      if (compensated < 0) compensated += 360;
-      if (compensated >= 360) compensated -= 360;
-    }
-    setCompensatedBearing(compensated);
-  }, [bearing, orientation]);
 
   // Responsive sizing
   const containerSize = isMobile ? 280 : 320;
@@ -95,6 +88,53 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
   useEffect(() => {
     setPulseKey(prev => prev + 1);
   }, [Math.floor(distance)]);
+
+  // Setup device orientation and compass
+  useEffect(() => {
+    let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
+
+    const setupCompass = () => {
+      if ('DeviceOrientationEvent' in window) {
+        // Request permission for iOS 13+
+        if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+          (DeviceOrientationEvent as any).requestPermission()
+            .then((response: string) => {
+              if (response === 'granted') {
+                startCompass();
+              }
+            });
+        } else {
+          // For other browsers
+          startCompass();
+        }
+      }
+    };
+
+    const startCompass = () => {
+      orientationListener = (event: DeviceOrientationEvent) => {
+        if (event.alpha !== null) {
+          // For iOS, webkitCompassHeading provides true north
+          const heading = (event as any).webkitCompassHeading || (360 - event.alpha);
+          setCompassHeading(heading);
+        }
+        
+        if (event.beta !== null && event.gamma !== null) {
+          // Calculate device orientation for tilt compensation
+          setDeviceOrientation(event.beta);
+        }
+      };
+
+      window.addEventListener('deviceorientation', orientationListener);
+    };
+
+    setupCompass();
+
+    return () => {
+      if (orientationListener) {
+        window.removeEventListener('deviceorientation', orientationListener);
+      }
+    };
+  }, []);
 
   return (
     <Box
@@ -224,13 +264,13 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
           }}
         />
 
-        {/* Target indicator - positioned based on compensated bearing */}
+        {/* Target indicator - positioned based on bearing */}
         <Box
           sx={{
             position: 'absolute',
             width: arrowSize,
             height: arrowSize,
-            transform: `rotate(${compensatedBearing}deg) translate(0, -${ringSize2/2 - 20}px)`,
+            transform: `rotate(${relativeBearing}deg) translate(0, -${ringSize2/2 - 20}px)`,
             transformOrigin: 'center',
             transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             zIndex: 4
@@ -255,7 +295,7 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
             borderLeft: '15px solid transparent',
             borderRight: '15px solid transparent',
             borderBottom: `40px solid ${styles.color}`,
-            transform: `rotate(${compensatedBearing}deg) translate(0, -${ringSize3/2 + 30}px)`,
+            transform: `rotate(${relativeBearing}deg) translate(0, -${ringSize3/2 + 30}px)`,
             transformOrigin: 'center bottom',
             transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             filter: `drop-shadow(0 0 8px ${styles.shadowColor})`,
@@ -292,7 +332,7 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
             fontFamily: 'SF Mono, Monaco, monospace'
           }}
         >
-          {bearing.toFixed(0)}°
+          {relativeBearing.toFixed(0)}°
         </Typography>
         <Typography
           variant="caption"
@@ -303,8 +343,22 @@ const DirectionalArrow: React.FC<DirectionalArrowProps> = ({
             letterSpacing: '1px'
           }}
         >
-          {getDirectionName(bearing)}
+          {getDirectionName(relativeBearing)}
         </Typography>
+        
+        {/* Debug info */}
+        {compassHeading !== null && (
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'rgba(255,255,255,0.4)',
+              fontSize: '10px',
+              mt: 1
+            }}
+          >
+            Compass: {compassHeading.toFixed(0)}° | Device: {deviceOrientation.toFixed(0)}°
+          </Typography>
+        )}
       </Box>
 
       {/* Haptic feedback simulation */}
