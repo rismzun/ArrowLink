@@ -5,7 +5,8 @@ import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 const app = express();
 const server = createServer(app);
-require('dotenv').config();
+import dotenv from 'dotenv';
+dotenv.config();
 
 const ORIGIN = process.env.CLIENT_URL || "http://localhost:5173"; // Default origin if not set in .env
 
