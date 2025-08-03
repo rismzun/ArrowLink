@@ -275,7 +275,7 @@ const PrecisionFindingWithCompass: React.FC<PrecisionFindingWithCompassProps> = 
         />
 
         {/* Compass markings */}
-        {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, index) => (
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => (
           <Box
             key={angle}
             sx={{
