@@ -1,0 +1,92 @@
+/* CSS animations for Precision Finding with Compass */
+
+/* Radar sweep effect */
+@keyframes radarSweep {
+  0% {
+    transform: rotate(0deg) scale(0.8);
+    opacity: 1;
+  }
+  50% {
+    transform: rotate(180deg) scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: rotate(360deg) scale(0.8);
+    opacity: 1;
+  }
+}
+
+/* Pulse animation for rings */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+}
+
+/* Target pulse animation */
+@keyframes targetPulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.2);
+    filter: brightness(1.3);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+/* Haptic feedback pulse */
+@keyframes hapticPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+/* Global styles for mobile-first design */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #000000;
+  color: #ffffff;
+  overflow-x: hidden;
+}
+
+/* Touch-friendly interactions */
+@media (hover: hover) and (pointer: fine) {
+  /* Desktop styles */
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Mobile styles - larger touch targets */
+  button, .MuiFab-root {
+    min-height: 48px;
+    min-width: 48px;
+  }
+}
