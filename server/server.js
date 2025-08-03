@@ -8,9 +8,11 @@ const server = createServer(app);
 import dotenv from 'dotenv';
 dotenv.config();
 
+const ORIGIN = process.env.CLIENT_URL || "http://localhost:5173"; // Default origin if not set in .env
+
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: ORIGIN,
     methods: ["GET", "POST"]
   }
 });
